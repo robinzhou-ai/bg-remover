@@ -4,8 +4,8 @@ export const runtime = "nodejs";
 
 export async function POST(request: NextRequest) {
   try {
-    const formData = await request.formData();
-    const image = formData.get("image") as File | null;
+    const incomingFormData = await request.formData();
+    const image = incomingFormData.get("image") as File | null;
 
     if (!image) {
       return NextResponse.json(
@@ -14,7 +14,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validate file type
     if (!image.type.startsWith("image/")) {
       return NextResponse.json(
         { error: "Invalid file type" },
@@ -22,7 +21,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validate file size (10MB max)
     if (image.size > 10 * 1024 * 1024) {
       return NextResponse.json(
         { error: "File too large (max 10MB)" },
@@ -30,7 +28,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get API key from environment
     const apiKey = process.env.REMOVE_BG_API_KEY;
     if (!apiKey) {
       return NextResponse.json(
@@ -39,32 +36,32 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Convert file to buffer for Remove.bg API
     const arrayBuffer = await image.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    // Call Remove.bg API
+    const rbFormData = new FormData();
+    rbFormData.append("image_file", new Blob([buffer], { type: image.type }), image.name);
+    rbFormData.append("size", "auto");
+
     const removeBgResponse = await fetch("https://api.remove.bg/v1.0/removebg", {
       method: "POST",
       headers: {
         "X-Api-Key": apiKey,
       },
-      body: buffer,
+      body: rbFormData,
     });
 
     if (!removeBgResponse.ok) {
       const errorText = await removeBgResponse.text();
       console.error("Remove.bg API error:", errorText);
       return NextResponse.json(
-        { error: "Failed to process image" },
-        { status:500 }
+        { error: "Remove.bg error: " + errorText },
+        { status: removeBgResponse.status }
       );
     }
 
-    // Get the result as a buffer
     const resultBuffer = await removeBgResponse.arrayBuffer();
 
-    // Return as PNG
     return new NextResponse(Buffer.from(resultBuffer), {
       headers: {
         "Content-Type": "image/png",
@@ -74,7 +71,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error("Error processing image:", error);
     return NextResponse.json(
-      { error: "Internal server error" },
+      { error: "Internal server error: " + String(error) },
       { status: 500 }
     );
   }

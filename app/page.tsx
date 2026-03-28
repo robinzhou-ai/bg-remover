@@ -31,8 +31,20 @@ export default function Home() {
       });
 
       if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || "Failed to process image");
+        let errorMessage = "Failed to process image";
+        try {
+          const contentType = response.headers.get("content-type");
+          if (contentType && contentType.includes("application/json")) {
+            const data = await response.json();
+            errorMessage = data.error || errorMessage;
+          } else {
+            const text = await response.text();
+            errorMessage = text.substring(0, 200);
+          }
+        } catch {
+          errorMessage = "Failed to process image (unknown error)";
+        }
+        throw new Error(errorMessage);
       }
 
       const blob = await response.blob();
